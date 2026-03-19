@@ -1,24 +1,55 @@
-name: MacRDP
-on: 
+name: MacVNC-Tailscale
+
+on:
   workflow_dispatch:
+
 jobs:
   build:
-    name: MacRDP
+    name: MacVNC-Tailscale
     runs-on: macos-latest
-    
-    steps:                 
-    - name: Enabling Remote Access
+    timeout-minutes: 3600
+
+    steps:
+    - name: Configurar Entorno y Privacidad
+      run: |
+        # Evitar que el sistema entre en reposo
+        sudo pmset -a sleep 0 displaysleep 0 disksleep 0
+        sudo -u runner defaults write com.apple.screensaver idleTime 0
+
+    - name: Instalar Tailscale y TigerVNC
+      run: |
+        brew install --cask tailscale
+        brew install tiger-vnc
+        
+        # Preparar contraseña para VNC (Contraseña: 123456)
+        mkdir -p ~/.vnc
+        echo "123456" | vncpasswd -f > ~/.vnc/passwd
+        chmod 600 ~/.vnc/passwd
+
+    - name: Conectar a Tailscale
       env:
-        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+        TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
       run: |
-          curl -s -o start.sh -L "https://raw.githubusercontent.com/JohnnyNetsec/github-vm/main/mac/start.sh"
-          chmod +x start.sh
-          bash start.sh "$NGROK_AUTH_TOKEN"
-          
-    - name: Log In Details To VNC Server
+        # Iniciar el demonio de Tailscale
+        sudo /Applications/Tailscale.app/Contents/MacOS/Tailscale up --authkey=$TAILSCALE_AUTH_KEY --hostname=gh-mac-runner
+        
+        echo "=== TU IP DE TAILSCALE ==="
+        /Applications/Tailscale.app/Contents/MacOS/Tailscale ip -4
+        echo "=========================="
+
+    - name: Iniciar Servidor VNC (TigerVNC)
       run: |
-         chmod +x login.sh
-         bash login.sh
-         
-    - name: MacOS System running...
-      uses: mxschmitt/action-tmate@v2
+        # Iniciamos TigerVNC en el puerto 5901 (Display :1)
+        # Esto evita el bloqueo de pantalla de Apple (MDM error)
+        vncserver :1 -geometry 1280x720 -depth 24 -localhost no
+        
+        echo "Servidor VNC iniciado en el puerto 5901."
+        echo "Conéctate usando la IP de Tailscale arriba indicada seguida de :5901"
+
+    - name: Log In Details (Simulado)
+      run: |
+        echo "IP para conectar: $(/Applications/Tailscale.app/Contents/MacOS/Tailscale ip -4):5901"
+        echo "Contraseña VNC: 123456"
+
+    - name: Mantener Sesión Activa
+      uses: mxschmitt/action-tmate@v3
