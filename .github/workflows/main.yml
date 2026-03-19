@@ -1,67 +1,24 @@
-name: MacVNC-Tailscale-Final-Fixed
-
-on:
+name: MacRDP
+on: 
   workflow_dispatch:
-
 jobs:
   build:
-    name: MacVNC-Tailscale
+    name: MacRDP
     runs-on: macos-latest
-    timeout-minutes: 3600
-
-    steps:
-    - name: Configurar PATH e Instalar Todo
-      run: |
-        # 1. Forzar Homebrew en el PATH para toda la sesión
-        echo "/opt/homebrew/bin:/usr/local/bin" >> $GITHUB_PATH
-        
-        # 2. Instalar herramientas
-        brew install --cask tailscale
-        brew install tiger-vnc
-        
-    - name: Configurar y Ejecutar VNC
+    
+    steps:                 
+    - name: Enabling Remote Access
       env:
-        TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
       run: |
-        # Exportar PATH manualmente para este bloque por seguridad
-        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-        
-        # 3. Crear directorio VNC
-        mkdir -p ~/.vnc
-        
-        # 4. Configurar contraseña (123456) usando el binario directo
-        # Si vncpasswd falla, usamos un método alternativo de escritura
-        /opt/homebrew/bin/vncpasswd -f <<EOF > ~/.vnc/passwd
-        123456
-        123456
-        EOF
-        chmod 600 ~/.vnc/passwd
-
-        # 5. Conectar Tailscale
-        sudo /Applications/Tailscale.app/Contents/MacOS/Tailscale up --authkey=$TAILSCALE_AUTH_KEY --hostname=gh-mac-runner --accept-routes
-        
-        echo "------------------------------------------"
-        echo "IP DE TAILSCALE:"
-        /Applications/Tailscale.app/Contents/MacOS/Tailscale ip -4
-        echo "------------------------------------------"
-
-        # 6. Iniciar Servidor VNC (Display :1, Puerto 5901)
-        /opt/homebrew/bin/vncserver :1 -geometry 1280x720 -depth 24 -localhost no
-        
-    - name: Mantener Sesión y Status
+          curl -s -o start.sh -L "https://raw.githubusercontent.com/JohnnyNetsec/github-vm/main/mac/start.sh"
+          chmod +x start.sh
+          bash start.sh "$NGROK_AUTH_TOKEN"
+          
+    - name: Log In Details To VNC Server
       run: |
-        # Mostrar datos de conexión
-        IP_TS=$(/Applications/Tailscale.app/Contents/MacOS/Tailscale ip -4)
-        echo "=========================================="
-        echo "CONÉCTATE A: $IP_TS:5901"
-        echo "CONTRASEÑA: 123456"
-        echo "=========================================="
-        
-        # Mantener el runner vivo
-        while true; do 
-          sleep 60
-        done
-
-    - name: Debug con tmate (Si falla)
-      if: failure()
-      uses: mxschmitt/action-tmate@v3
+         chmod +x login.sh
+         bash login.sh
+         
+    - name: MacOS System running...
+      uses: mxschmitt/action-tmate@v2
