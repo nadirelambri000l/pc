@@ -1,24 +1,56 @@
-name: MacRDP
+name: MacVNC-Bypass
+
 on: 
   workflow_dispatch:
+
 jobs:
   build:
-    name: MacRDP
+    name: MacVNC
     runs-on: macos-latest
-    
-    steps:                 
-    - name: Enabling Remote Access
+    timeout-minutes: 3600
+
+    steps:
+    - name: Bypass Screen Recording Restrictions
+      run: |
+        echo "Intentando saltar restricciones de MDM/Privacidad..."
+        
+        # 1. Forzar activación de Remote Management con privilegios totales
+        sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+        -activate -configure -access -on \
+        -privs -all -restart -agent -vnclegacy yes
+
+        # 2. Resetear base de datos de transparencia y privacidad (TCC)
+        # Esto intenta 'limpiar' bloqueos previos de grabación de pantalla
+        sudo tccutil reset ScreenCapture || true
+        sudo tccutil reset Accessibility || true
+
+        # 3. TRUCO CLAVE: Reiniciar el proceso de login
+        # Esto fuerza al sistema a detectar el monitor virtual del runner
+        sudo killall loginwindow || true
+        sleep 5
+
+    - name: Enabling Remote Access via Ngrok
       env:
         NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
       run: |
-          curl -s -o start.sh -L "https://raw.githubusercontent.com/JohnnyNetsec/github-vm/main/mac/start.sh"
-          chmod +x start.sh
-          bash start.sh "$NGROK_AUTH_TOKEN"
+        # Descargamos el script de inicio
+        curl -s -o start.sh -L "https://raw.githubusercontent.com/JohnnyNetsec/github-vm/main/mac/start.sh"
+        chmod +x start.sh
+        
+        # Ejecutamos el script pasando el token de Ngrok
+        # Nota: Este script suele instalar Ngrok y abrir el túnel al puerto 5900
+        bash start.sh "$NGROK_AUTH_TOKEN"
           
     - name: Log In Details To VNC Server
       run: |
-         chmod +x login.sh
-         bash login.sh
+        if [ -f login.sh ]; then
+          chmod +x login.sh
+          bash login.sh
+        else
+          echo "No se encontró login.sh, verificando servicios..."
+          launchctl list | grep -i remoting || true
+        fi
          
-    - name: MacOS System running...
-      uses: mxschmitt/action-tmate@v2
+    - name: Keep Alive (tmate session)
+      uses: mxschmitt/action-tmate@v3
+      # tmate te permite entrar por SSH si el VNC falla para arreglarlo en vivo
