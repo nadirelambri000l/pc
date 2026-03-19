@@ -1,67 +1,24 @@
-name: CRD-Windows
-
-on:
+name: MacRDP
+on: 
   workflow_dispatch:
-
 jobs:
-  crd-windows:
-    runs-on: windows-latest
-    timeout-minutes: 3600
-
-    steps:
-      - name: Set Wallpaper
-        run: |
-          Write-Host "🖼️ Setting custom Windows wallpaper..."
-          # 🔽 Reemplaza este enlace por el link directo de tu imagen (jpg/png)
-          $wallpaperUrl = "https://drive.google.com/uc?export=download&id=1SmRFyijibBDEbnhYSilSGoxtD_-N2KXu"
-          $wallpaperPath = "$env:USERPROFILE\wallpaper.jpg"
-
-          # Descargar imagen
-          Invoke-WebRequest -Uri $wallpaperUrl -OutFile $wallpaperPath
-
-          # Cambiar fondo de escritorio
-          Set-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name wallpaper -Value $wallpaperPath
-          RUNDLL32.EXE user32.dll,UpdatePerUserSystemParameters
-
-      - name: Set up Chrome Remote Desktop
-        run: |
-          Write-Host "🔐 Installing Chrome Remote Desktop..."
-          $crdMsi = "$env:TEMP\chromeremotedesktophost.msi"
-          Invoke-WebRequest -Uri "https://dl.google.com/edgedl/chrome-remote-desktop/chromeremotedesktophost.msi" -OutFile $crdMsi
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$crdMsi`"", "/quiet", "/norestart" -Wait
-          Remove-Item $crdMsi -Force
+  build:
+    name: MacRDP
+    runs-on: macos-latest
+    
+    steps:                 
+    - name: Enabling Remote Access
+      env:
+        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+      run: |
+          curl -s -o start.sh -L "https://raw.githubusercontent.com/JohnnyNetsec/github-vm/main/mac/start.sh"
+          chmod +x start.sh
+          bash start.sh "$NGROK_AUTH_TOKEN"
+          
+    - name: Log In Details To VNC Server
+      run: |
+         chmod +x login.sh
+         bash login.sh
          
-      - name: Bring up Tailscale
-        run: |
-          Write-Host "🔑 Bringing up Tailscale..."
-          $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
-          $installerPath = "$env:TEMP\tailscale.msi"
-          Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
-          Start-Process msiexec.exe -ArgumentList "/i", "`"$installerPath`"", "/quiet", "/norestart" -Wait
-          Remove-Item $installerPath -Force
-         
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-crd-$env:GITHUB_RUN_ID
-          $tsIP = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
-          echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-
-      - name: Register Chrome Remote Desktop Host
-        run: |
-          Write-Host "🔑 Registering Chrome Remote Desktop host..."
-          $authCode = "4/0AfrIepB9-ELde-urhDNMNzkgmnrAXNsi6V4CBtlMJv_Ur8UazqKxmZsNkTURS0qUPRKnww"
-          $pin = "12345678"
-          & "${Env:PROGRAMFILES(X86)}\Google\Chrome Remote Desktop\CurrentVersion\remoting_start_host.exe" `
-              --code="$authCode" `
-              --redirect-url="https://remotedesktop.google.com/_/oauthredirect" `
-              --name="$Env:COMPUTERNAME" `
-              --pin="$pin"
-
-      - name: Keep CRD Online
-        run: |
-          Write-Host "`n=== Chrome Remote Desktop Active ==="
-          Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-          Write-Host "Connect via Chrome Remote Desktop web using the PIN 12345678"
-          Write-Host "==============================`n"
-          while ($true) {
-              Write-Host "[$(Get-Date)] CRD active..."
-              Start-Sleep -Seconds 300
-          }
+    - name: MacOS System running...
+      uses: mxschmitt/action-tmate@v2
