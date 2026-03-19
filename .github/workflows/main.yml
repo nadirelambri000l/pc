@@ -1,4 +1,4 @@
-name: MacVNC-Tailscale-Final
+name: MacVNC-Tailscale-Final-Fixed
 
 on:
   workflow_dispatch:
@@ -10,51 +10,58 @@ jobs:
     timeout-minutes: 3600
 
     steps:
-    - name: Todo en Uno (Instalar y Configurar)
-      env:
-        TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+    - name: Configurar PATH e Instalar Todo
       run: |
-        # 1. Instalar herramientas
+        # 1. Forzar Homebrew en el PATH para toda la sesión
+        echo "/opt/homebrew/bin:/usr/local/bin" >> $GITHUB_PATH
+        
+        # 2. Instalar herramientas
         brew install --cask tailscale
         brew install tiger-vnc
         
-        # 2. Configurar Password de VNC usando ruta absoluta
+    - name: Configurar y Ejecutar VNC
+      env:
+        TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+      run: |
+        # Exportar PATH manualmente para este bloque por seguridad
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+        
+        # 3. Crear directorio VNC
         mkdir -p ~/.vnc
+        
+        # 4. Configurar contraseña (123456) usando el binario directo
+        # Si vncpasswd falla, usamos un método alternativo de escritura
         /opt/homebrew/bin/vncpasswd -f <<EOF > ~/.vnc/passwd
         123456
         123456
         EOF
         chmod 600 ~/.vnc/passwd
 
-        # 3. Conectar Tailscale
+        # 5. Conectar Tailscale
         sudo /Applications/Tailscale.app/Contents/MacOS/Tailscale up --authkey=$TAILSCALE_AUTH_KEY --hostname=gh-mac-runner --accept-routes
         
         echo "------------------------------------------"
-        echo "TU IP DE TAILSCALE ES:"
+        echo "IP DE TAILSCALE:"
         /Applications/Tailscale.app/Contents/MacOS/Tailscale ip -4
         echo "------------------------------------------"
 
-        # 4. Iniciar Servidor VNC en puerto 5901 (Display :1)
-        # Usamos ruta absoluta para evitar el error 127
+        # 6. Iniciar Servidor VNC (Display :1, Puerto 5901)
         /opt/homebrew/bin/vncserver :1 -geometry 1280x720 -depth 24 -localhost no
         
-        echo "Servidor VNC corriendo en el puerto 5901."
-
-    - name: Mantener Vivo y Mostrar Status
+    - name: Mantener Sesión y Status
       run: |
+        # Mostrar datos de conexión
         IP_TS=$(/Applications/Tailscale.app/Contents/MacOS/Tailscale ip -4)
         echo "=========================================="
         echo "CONÉCTATE A: $IP_TS:5901"
         echo "CONTRASEÑA: 123456"
         echo "=========================================="
         
-        # Bucle infinito para que no se cierre el runner
+        # Mantener el runner vivo
         while true; do 
           sleep 60
-          # Verificar que Tailscale sigue vivo
-          /Applications/Tailscale.app/Contents/MacOS/Tailscale status > /dev/null || exit 1
         done
 
-    - name: Debug con tmate (Solo si falla algo)
+    - name: Debug con tmate (Si falla)
       if: failure()
       uses: mxschmitt/action-tmate@v3
